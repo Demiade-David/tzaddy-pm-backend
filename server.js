@@ -1,0 +1,119 @@
+// mongodb+srv://demiladedavid12_db_user:Elizabeth2013@tzaddycluster.udkdubn.mongodb.net/?appName=TzaddyCluster
+
+require("dotenv").config();
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const path = require("path");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: "5mb" }));
+app.use(express.static(path.join(__dirname, "tzaddy-pm/public")));
+
+// MongoDB connection
+const mongoUri = process.env.MONGODB_URI && process.env.MONGODB_URI.trim();
+if (!mongoUri) {
+  console.error("MongoDB URI not configured. Set MONGODB_URI in .env");
+  process.exit(1);
+}
+
+mongoose
+  .connect(mongoUri, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 10000,
+  })
+  .then(() => console.log("Connected to MongoDB Atlas"))
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+    if (err.reason) console.error("Reason:", err.reason);
+    process.exit(1);
+  });
+
+// Routes
+app.use("/api/clients", require("./tzaddy-pm/routes/clients"));
+app.use("/api/compliance", require("./tzaddy-pm/routes/compliance"));
+app.use("/api/efs", require("./tzaddy-pm/routes/efs"));
+app.use("/api/documents", require("./tzaddy-pm/routes/documents"));
+app.use("/api/communications", require("./tzaddy-pm/routes/communications"));
+app.use("/api/billing", require("./tzaddy-pm/routes/billing"));
+
+// Dashboard summary endpoint
+const Client = require("./tzaddy-pm/models/Client");
+const Compliance = require("./tzaddy-pm/models/Compliance");
+const EFS = require("./tzaddy-pm/models/EFS");
+const Billing = require("./tzaddy-pm/models/Billing");
+
+app.get("/api/dashboard", async (req, res) => {
+  try {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const fourteenDays = new Date(now);
+    fourteenDays.setDate(fourteenDays.getDate() + 14);
+
+    const [
+      activeClients,
+      pendingKyc,
+      overdueCompliance,
+      dueSoonCompliance,
+      pendingEfs,
+      billingRecords,
+    ] = await Promise.all([
+      Client.countDocuments({ status: "Active" }),
+      Client.countDocuments({ kycComplete: false, status: { $ne: "Off-boarded" } }),
+      Compliance.find({ filed: false, dueDate: { $lt: now } }).lean(),
+      Compliance.find({ filed: false, dueDate: { $gte: now, $lte: fourteenDays } }).lean(),
+      EFS.countDocuments({ status: { $ne: "Confirmed" } }),
+      Billing.find({ paid: false }).lean(),
+    ]);
+
+    const unpaidAmount = billingRecords.reduce(
+      (sum, b) => sum + (b.hours || 0) * (b.rate || 0),
+      0
+    );
+
+    res.json({
+      activeClients,
+      pendingKyc,
+      overdueCount: overdueCompliance.length,
+      overdueItems: overdueCompliance,
+      dueSoonCount: dueSoonCompliance.length,
+      dueSoonItems: dueSoonCompliance,
+      pendingEfs,
+      unpaidAmount,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reset endpoint (use with caution)
+app.post("/api/reset", async (req, res) => {
+  try {
+    await Promise.all([
+      Client.deleteMany({}),
+      Compliance.deleteMany({}),
+      EFS.deleteMany({}),
+      require("./tzaddy-pm/models/Document").deleteMany({}),
+      require("./tzaddy-pm/models/Communication").deleteMany({}),
+      Billing.deleteMany({}),
+    ]);
+    res.json({ message: "All data cleared" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Serve frontend for all non-API routes
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "tzaddy-pm/public", "index.html"));
+});
+
+app.listen(PORT, () => {
+  console.log(`Tzaddy Practice Manager running on port ${PORT}`);
+});

@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tzaddy Practice Manager</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f5; color: #1a1a1a; }
+    input, select, textarea, button { font-family: inherit; }
+    .input { width: 100%; padding: 9px 12px; border: 1.5px solid #ddd; border-radius: 5px; font-size: 14px; outline: none; transition: border-color 0.15s; }
+    .input:focus { border-color: #1a1a1a; }
+    select.input { background: #fff; }
+    textarea.input { min-height: 60px; resize: vertical; }
+    .btn { padding: 9px 18px; border: none; border-radius: 5px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: #1a1a1a; color: #fff; }
+    .btn-secondary { background: #f0f0f0; color: #333; }
+    .btn-small { padding: 5px 12px; font-size: 12px; background: #f5f5f5; color: #333; border: 1px solid #e0e0e0; border-radius: 4px; cursor: pointer; }
+    .btn-small:hover { background: #eee; }
+    .card { border: 1.5px solid #eee; border-radius: 6px; padding: 14px 16px; background: #fafafa; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+    .modal { background: #fff; border-radius: 8px; width: 100%; max-width: 520px; max-height: 85vh; overflow: auto; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-header h3 { font-size: 17px; font-weight: 700; }
+    .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: #666; line-height: 1; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .flex-end { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .empty { text-align: center; padding: 40px 20px; color: #999; font-size: 14px; }
+    .stat-card { background: #fff; border: 1.5px solid #eee; border-radius: 8px; padding: 16px; text-align: center; }
+    .stat-label { font-size: 11px; color: #888; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
+    .stat-value { font-size: 24px; font-weight: 700; margin-top: 6px; }
+    .alert-red { background: #fff5f5; border: 1.5px solid #f5c2c7; border-radius: 6px; padding: 12px 16px; margin-bottom: 12px; }
+    .alert-yellow { background: #fff8e1; border: 1.5px solid #ffe69c; border-radius: 6px; padding: 12px 16px; }
+    .tabs { background: #fff; border-bottom: 1.5px solid #eee; padding: 0 24px; display: flex; overflow-x: auto; gap: 0; }
+    .tab { padding: 12px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 500; color: #888; border-bottom: 2.5px solid transparent; white-space: nowrap; }
+    .tab.active { font-weight: 700; color: #1a1a1a; border-bottom-color: #1a1a1a; }
+    @media (max-width: 640px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .tabs { padding: 0 12px; }
+      .tab { padding: 10px 10px; font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    // ============ API HELPER ============
+    const API = {
+      async get(endpoint) {
+        const res = await fetch(`/api/${endpoint}`);
+        if (!res.ok) throw new Error(`GET ${endpoint} failed`);
+        return res.json();
+      },
+      async post(endpoint, data) {
+        const res = await fetch(`/api/${endpoint}`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error(`POST ${endpoint} failed`);
+        return res.json();
+      },
+      async put(endpoint, id, data) {
+        const res = await fetch(`/api/${endpoint}/${id}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error(`PUT ${endpoint}/${id} failed`);
+        return res.json();
+      },
+      async patch(endpoint, id, data) {
+        const res = await fetch(`/api/${endpoint}/${id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error(`PATCH ${endpoint}/${id} failed`);
+        return res.json();
+      },
+      async del(endpoint, id) {
+        const res = await fetch(`/api/${endpoint}/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(`DELETE ${endpoint}/${id} failed`);
+        return res.json();
+      },
+    };
+
+    // ============ CONSTANTS ============
+    const TAX_HEADS = ["CIT", "VAT", "PAYE", "WHT", "CGT", "EDT", "Tertiary Education Tax"];
+    const CLIENT_STATUS = ["Prospect", "Onboarding", "Active", "Inactive", "Off-boarded"];
+    const EFS_STATUS = ["Draft", "Under Review", "Approved", "Submitted", "Confirmed"];
+    const DOC_CATEGORIES = ["Engagement Documentation", "Client Tax Records", "Work Papers", "Correspondence Files", "Approval & Review Trails", "Disclosure Documentation"];
+    const CHANNELS = ["Email", "Phone", "WhatsApp", "Letter", "In-person", "NRS Portal", "Other"];
+
+    function formatDate(d) {
+      if (!d) return "";
+      return new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
+    }
+
+    function daysUntil(dateStr) {
+      if (!dateStr) return null;
+      const now = new Date(); now.setHours(0,0,0,0);
+      const target = new Date(dateStr); target.setHours(0,0,0,0);
+      return Math.ceil((target - now) / (1000*60*60*24));
+    }
+
+    // ============ SHARED COMPONENTS ============
+    function Modal({ title, onClose, children }) {
+      return (
+        <div className="overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h3>{title}</h3>
+              <button className="modal-close" onClick={onClose}>&times;</button>
+            </div>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    function Field({ label, children }) {
+      return <div className="field"><label>{label}</label>{children}</div>;
+    }
+
+    function Badge({ text, color }) {
+      return <span className="badge" style={{ background: color + "18", color }}>{text}</span>;
+    }
+
+    function StatusDot({ days }) {
+      if (days === null) return null;
+      const color = days < 0 ? "#dc3545" : days <= 7 ? "#fd7e14" : days <= 30 ? "#ffc107" : "#28a745";
+      return <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: color, marginRight: 6 }} />;
+    }
+
+    // ============ MODULE 1: CLIENTS ============
+    function ClientsModule({ clients, setClients, refresh }) {
+      const [showForm, setShowForm] = useState(false);
+      const [editing, setEditing] = useState(null);
+      const [filter, setFilter] = useState("All");
+      const [saving, setSaving] = useState(false);
+      const initial = { name: "", tin: "", status: "Prospect", contactPerson: "", phone: "", email: "", address: "", kycComplete: false, onboardDate: "", notes: "" };
+      const [form, setForm] = useState(initial);
+
+      const statusColors = { Prospect: "#6c757d", Onboarding: "#0d6efd", Active: "#198754", Inactive: "#ffc107", "Off-boarded": "#dc3545" };
+
+      async function handleSave() {
+        if (!form.name.trim() || saving) return;
+        setSaving(true);
+        try {
+          if (editing) {
+            await API.put("clients", editing, form);
+          } else {
+            await API.post("clients", form);
+          }
+          await refresh();
+          setShowForm(false); setEditing(null); setForm(initial);
+        } catch (e) { alert("Error saving: " + e.message); }
+        setSaving(false);
+      }
+
+      function handleEdit(c) {
+        setForm({ name: c.name, tin: c.tin || "", status: c.status, contactPerson: c.contactPerson || "", phone: c.phone || "", email: c.email || "", address: c.address || "", kycComplete: c.kycComplete, onboardDate: c.onboardDate ? c.onboardDate.split("T")[0] : "", notes: c.notes || "" });
+        setEditing(c._id);
+        setShowForm(true);
+      }
+
+      async function handleDelete(id) {
+        if (!confirm("Delete this client?")) return;
+        await API.del("clients", id);
+        await refresh();
+      }
+
+      const filtered = filter === "All" ? clients : clients.filter(c => c.status === filter);
+
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {["All", ...CLIENT_STATUS].map(s => (
+                <button key={s} onClick={() => setFilter(s)} className={`btn-small`} style={{
+                  background: filter === s ? "#1a1a1a" : "#fff", color: filter === s ? "#fff" : "#555",
+                  borderColor: filter === s ? "#1a1a1a" : "#ddd",
+                }}>{s} {s !== "All" && `(${clients.filter(c => c.status === s).length})`}</button>
+              ))}
+            </div>
+            <button className="btn btn-primary" onClick={() => { setForm(initial); setEditing(null); setShowForm(true); }}>+ New Client</button>
+          </div>
+
+          {filtered.length === 0 ? <div className="empty">No clients yet. Add your first client to get started.</div> : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {filtered.map(c => (
+                <div key={c._id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{c.name}</div>
+                    <div style={{ fontSize: 12, color: "#777" }}>
+                      TIN: {c.tin || "—"} &nbsp;|&nbsp; {c.contactPerson || "No contact"} &nbsp;|&nbsp; KYC: {c.kycComplete ? "✓" : "Pending"}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Badge text={c.status} color={statusColors[c.status]} />
+                    <button className="btn-small" onClick={() => handleEdit(c)}>Edit</button>
+                    <button className="btn-small" onClick={() => handleDelete(c._id)} style={{ color: "#dc3545" }}>×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showForm && (
+            <Modal title={editing ? "Edit Client" : "New Client"} onClose={() => { setShowForm(false); setEditing(null); }}>
+              <Field label="Client / Business Name"><input className="input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></Field>
+              <Field label="TIN"><input className="input" value={form.tin} onChange={e => setForm({...form, tin: e.target.value})} placeholder="Tax Identification Number" /></Field>
+              <Field label="Status">
+                <select className="input" value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+                  {CLIENT_STATUS.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </Field>
+              <Field label="Contact Person"><input className="input" value={form.contactPerson} onChange={e => setForm({...form, contactPerson: e.target.value})} /></Field>
+              <div className="grid-2">
+                <Field label="Phone"><input className="input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></Field>
+                <Field label="Email"><input className="input" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></Field>
+              </div>
+              <Field label="Address"><input className="input" value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></Field>
+              <Field label="Onboard Date"><input type="date" className="input" value={form.onboardDate} onChange={e => setForm({...form, onboardDate: e.target.value})} /></Field>
+              <Field label="KYC Complete">
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                  <input type="checkbox" checked={form.kycComplete} onChange={e => setForm({...form, kycComplete: e.target.checked})} /> Yes, KYC documentation collected
+                </label>
+              </Field>
+              <Field label="Notes"><textarea className="input" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></Field>
+              <div className="flex-end">
+                <button className="btn btn-secondary" onClick={() => { setShowForm(false); setEditing(null); }}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : editing ? "Update" : "Save"} Client</button>
+              </div>
+            </Modal>
+          )}
+        </div>
+      );
+    }
+
+    // ============ MODULE 2: COMPLIANCE ============
+    function ComplianceModule({ compliance, setCompliance, clients, refresh }) {
+      const [showForm, setShowForm] = useState(false);
+      const [saving, setSaving] = useState(false);
+      const initial = { clientName: "", taxHead: "CIT", description: "", dueDate: "", reference: "" };
+      const [form, setForm] = useState(initial);
+
+      async function handleSave() {
+        if (!form.clientName.trim() || !form.dueDate || saving) return;
+        setSaving(true);
+        try {
+          await API.post("compliance", form);
+          await refresh();
+          setShowForm(false); setForm(initial);
+        } catch (e) { alert("Error: " + e.message); }
+        setSaving(false);
+      }
+
+      async function toggleFiled(item) {
+        const updates = { filed: !item.filed };
+        if (!item.filed) updates.filedDate = new Date().toISOString();
+        else updates.filedDate = null;
+        await API.patch("compliance", item._id, updates);
+        await refresh();
+      }
+
+      async function handleDelete(id) {
+        await API.del("compliance", id);
+        await refresh();
+      }
+
+      const sorted = [...compliance].sort((a, b) => {
+        if (a.filed !== b.filed) return a.filed ? 1 : -1;
+        return new Date(a.dueDate) - new Date(b.dueDate);
+      });
+
+      const overdue = compliance.filter(c => !c.filed && daysUntil(c.dueDate) < 0).length;
+      const dueSoon = compliance.filter(c => !c.filed && daysUntil(c.dueDate) >= 0 && daysUntil(c.dueDate) <= 7).length;
+
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", gap: 12, fontSize: 13 }}>
+              {overdue > 0 && <span style={{ color: "#dc3545", fontWeight: 600 }}>⚠ {overdue} overdue</span>}
+              {dueSoon > 0 && <span style={{ color: "#fd7e14", fontWeight: 600 }}>{dueSoon} due within 7 days</span>}
+            </div>
+            <button className="btn btn-primary" onClick={() => { setForm(initial); setShowForm(true); }}>+ New Deadline</button>
+          </div>
+
+          {sorted.length === 0 ? <div className="empty">No compliance deadlines tracked yet.</div> : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {sorted.map(c => {
+                const days = daysUntil(c.dueDate);
+                return (
+                  <div key={c._id} className="card" style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    background: c.filed ? "#f8fff8" : days < 0 ? "#fff5f5" : "#fafafa",
+                    opacity: c.filed ? 0.7 : 1,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input type="checkbox" checked={c.filed} onChange={() => toggleFiled(c)} style={{ width: 16, height: 16, cursor: "pointer" }} />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 14, textDecoration: c.filed ? "line-through" : "none" }}>{c.clientName}</div>
+                        <div style={{ fontSize: 12, color: "#777" }}>
+                          <StatusDot days={c.filed ? null : days} />
+                          {c.taxHead} &nbsp;|&nbsp; Due: {formatDate(c.dueDate)}
+                          {c.filed && c.filedDate && <> &nbsp;|&nbsp; Filed: {formatDate(c.filedDate)}</>}
+                          {!c.filed && days !== null && <> &nbsp;|&nbsp; <span style={{ color: days < 0 ? "#dc3545" : days <= 7 ? "#fd7e14" : "#666" }}>{days < 0 ? `${Math.abs(days)}d overdue` : `${days}d left`}</span></>}
+                        </div>
+                        {c.description && <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>{c.description}</div>}
+                      </div>
+                    </div>
+                    <button className="btn-small" onClick={() => handleDelete(c._id)} style={{ color: "#dc3545" }}>×</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {showForm && (
+            <Modal title="New Compliance Deadline" onClose={() => setShowForm(false)}>
+              <Field label="Client Name">
+                <input className="input" value={form.clientName} onChange={e => setForm({...form, clientName: e.target.value})} list="cl-names" />
+                <datalist id="cl-names">{clients.map(c => <option key={c._id} value={c.name} />)}</datalist>
+              </Field>
+              <Field label="Tax Head">
+                <select className="input" value={form.taxHead} onChange={e => setForm({...form, taxHead: e.target.value})}>
+                  {TAX_HEADS.map(t => <option key={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field label="Description"><input className="input" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="e.g. Annual CIT return 2025" /></Field>
+              <Field label="Due Date"><input type="date" className="input" value={form.dueDate} onChange={e => setForm({...form, dueDate: e.target.value})} /></Field>
+              <div className="flex-end">
+                <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Deadline"}</button>
+              </div>
+            </Modal>
+          )}
+        </div>
+      );
+    }
+
+    // ============ MODULE 3: EFS WORKFLOW ============
+    function EFSModule({ efsWorkflow, clients, refresh }) {
+      const [showForm, setShowForm] = useState(false);
+      const [editing, setEditing] = useState(null);
+      const [saving, setSaving] = useState(false);
+      const initial = { clientName: "", taxHead: "CIT", filingPeriod: "", status: "Draft", preparedBy: "", reviewedBy: "", approvedBy: "", submissionRef: "", notes: "" };
+      const [form, setForm] = useState(initial);
+
+      const statusColors = { Draft: "#6c757d", "Under Review": "#0d6efd", Approved: "#198754", Submitted: "#fd7e14", Confirmed: "#28a745" };
+
+      async function handleSave() {
+        if (!form.clientName.trim() || saving) return;
+        setSaving(true);
+        try {
+          if (editing) { await API.put("efs", editing, form); }
+          else { await API.post("efs", form); }
+          await refresh();
+          setShowForm(false); setEditing(null); setForm(initial);
+        } catch (e) { alert("Error: " + e.message); }
+        setSaving(false);
+      }
+
+      function handleEdit(item) {
+        setForm({ clientName: item.clientName, taxHead: item.taxHead, filingPeriod: item.filingPeriod || "", status: item.status, preparedBy: item.preparedBy || "", reviewedBy: item.reviewedBy || "", approvedBy: item.approvedBy || "", submissionRef: item.submissionRef || "", notes: item.notes || "" });
+        setEditing(item._id);
+        setShowForm(true);
+      }
+
+      async function advanceStatus(item) {
+        const idx = EFS_STATUS.indexOf(item.status);
+        if (idx < EFS_STATUS.length - 1) {
+          await API.patch("efs", item._id, { status: EFS_STATUS[idx + 1] });
+          await refresh();
+        }
+      }
+
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <p style={{ fontSize: 13, color: "#666" }}>Internal review and approval before EFS submission</p>
+            <button className="btn btn-primary" onClick={() => { setForm(initial); setEditing(null); setShowForm(true); }}>+ New Filing</button>
+          </div>
+
+          {efsWorkflow.length === 0 ? <div className="empty">No EFS filings tracked yet.</div> : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {efsWorkflow.map(item => (
+                <div key={item._id} className="card">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{item.clientName}</div>
+                      <div style={{ fontSize: 12, color: "#777", marginTop: 3 }}>{item.taxHead} &nbsp;|&nbsp; Period: {item.filingPeriod || "—"}</div>
+                      <div style={{ fontSize: 11, color: "#999", marginTop: 4 }}>
+                        {item.preparedBy && <>Prepared: {item.preparedBy} &nbsp;</>}
+                        {item.reviewedBy && <>| Reviewed: {item.reviewedBy} &nbsp;</>}
+                        {item.approvedBy && <>| Approved: {item.approvedBy}</>}
+                      </div>
+                      {item.submissionRef && <div style={{ fontSize: 11, color: "#198754", marginTop: 3 }}>Ref: {item.submissionRef}</div>}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <Badge text={item.status} color={statusColors[item.status]} />
+                      {EFS_STATUS.indexOf(item.status) < EFS_STATUS.length - 1 && (
+                        <button className="btn-small" onClick={() => advanceStatus(item)}>Advance →</button>
+                      )}
+                      <button className="btn-small" onClick={() => handleEdit(item)}>Edit</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showForm && (
+            <Modal title={editing ? "Edit Filing" : "New EFS Filing"} onClose={() => { setShowForm(false); setEditing(null); }}>
+              <Field label="Client Name">
+                <input className="input" value={form.clientName} onChange={e => setForm({...form, clientName: e.target.value})} list="cl-efs" />
+                <datalist id="cl-efs">{clients.map(c => <option key={c._id} value={c.name} />)}</datalist>
+              </Field>
+              <div className="grid-2">
+                <Field label="Tax Head">
+                  <select className="input" value={form.taxHead} onChange={e => setForm({...form, taxHead: e.target.value})}>
+                    {TAX_HEADS.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </Field>
+                <Field label="Filing Period"><input className="input" value={form.filingPeriod} onChange={e => setForm({...form, filingPeriod: e.target.value})} placeholder="e.g. 2025 Annual" /></Field>
+              </div>
+              <Field label="Status">
+                <select className="input" value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+                  {EFS_STATUS.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </Field>
+              <Field label="Prepared By"><input className="input" value={form.preparedBy} onChange={e => setForm({...form, preparedBy: e.target.value})} /></Field>
+              <Field label="Reviewed By"><input className="input" value={form.reviewedBy} onChange={e => setForm({...form, reviewedBy: e.target.value})} /></Field>
+              <Field label="Approved By"><input className="input" value={form.approvedBy} onChange={e => setForm({...form, approvedBy: e.target.value})} /></Field>
+              <Field label="EFS Submission Reference"><input className="input" value={form.submissionRef} onChange={e => setForm({...form, submissionRef: e.target.value})} /></Field>
+              <Field label="Notes"><textarea className="input" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></Field>
+              <div className="flex-end">
+                <button className="btn btn-secondary" onClick={() => { setShowForm(false); setEditing(null); }}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : editing ? "Update" : "Save"}</button>
+              </div>
+            </Modal>
+          )}
+        </div>
+      );
+    }
+
+    // ============ MODULE 4: DOCUMENTS ============
+    function DocumentsModule({ documents, clients, refresh }) {
+      const [showForm, setShowForm] = useState(false);
+      const [saving, setSaving] = useState(false);
+      const initial = { clientName: "", category: DOC_CATEGORIES[0], title: "", description: "", fileRef: "", retentionDate: "" };
+      const [form, setForm] = useState(initial);
+
+      async function handleSave() {
+        if (!form.title.trim() || saving) return;
+        setSaving(true);
+        try {
+          await API.post("documents", form);
+          await refresh();
+          setShowForm(false); setForm(initial);
+        } catch (e) { alert("Error: " + e.message); }
+        setSaving(false);
+      }
+
+      async function handleDelete(id) {
+        await API.del("documents", id);
+        await refresh();
+      }
+
+      const grouped = DOC_CATEGORIES.reduce((acc, cat) => {
+        acc[cat] = documents.filter(d => d.category === cat);
+        return acc;
+      }, {});
+
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <p style={{ fontSize: 13, color: "#666" }}>Six categories per the compliant engagement file framework</p>
+            <button className="btn btn-primary" onClick={() => { setForm(initial); setShowForm(true); }}>+ New Document</button>
+          </div>
+
+          {documents.length === 0 ? <div className="empty">No documents registered yet.</div> : (
+            <div style={{ display: "grid", gap: 16 }}>
+              {DOC_CATEGORIES.map(cat => {
+                const docs = grouped[cat];
+                if (!docs || docs.length === 0) return null;
+                return (
+                  <div key={cat}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      {cat} ({docs.length})
+                    </div>
+                    {docs.map(d => (
+                      <div key={d._id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, padding: "10px 14px" }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{d.title}</div>
+                          <div style={{ fontSize: 11, color: "#888" }}>
+                            {d.clientName && <>{d.clientName} &nbsp;|&nbsp;</>} Added: {formatDate(d.createdAt)}
+                            {d.retentionDate && <> &nbsp;|&nbsp; Retain until: {formatDate(d.retentionDate)}</>}
+                          </div>
+                        </div>
+                        <button className="btn-small" onClick={() => handleDelete(d._id)} style={{ color: "#dc3545" }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {showForm && (
+            <Modal title="Register Document" onClose={() => setShowForm(false)}>
+              <Field label="Document Title"><input className="input" value={form.title} onChange={e => setForm({...form, title: e.target.value})} /></Field>
+              <Field label="Client">
+                <input className="input" value={form.clientName} onChange={e => setForm({...form, clientName: e.target.value})} list="cl-doc" />
+                <datalist id="cl-doc">{clients.map(c => <option key={c._id} value={c.name} />)}</datalist>
+              </Field>
+              <Field label="Category">
+                <select className="input" value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
+                  {DOC_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </Field>
+              <Field label="Description"><textarea className="input" value={form.description} onChange={e => setForm({...form, description: e.target.value})} /></Field>
+              <Field label="File Reference / Location"><input className="input" value={form.fileRef} onChange={e => setForm({...form, fileRef: e.target.value})} placeholder="e.g. Google Drive link, folder path" /></Field>
+              <Field label="Retention Date"><input type="date" className="input" value={form.retentionDate} onChange={e => setForm({...form, retentionDate: e.target.value})} /></Field>
+              <div className="flex-end">
+                <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Document"}</button>
+              </div>
+            </Modal>
+          )}
+        </div>
+      );
+    }
+
+    // ============ MODULE 5: COMMUNICATIONS ============
+    function CommunicationsModule({ communications, clients, refresh }) {
+      const [showForm, setShowForm] = useState(false);
+      const [saving, setSaving] = useState(false);
+      const today = new Date().toISOString().split("T")[0];
+      const initial = { clientName: "", date: today, channel: "Email", direction: "Outbound", subject: "", summary: "", parties: "" };
+      const [form, setForm] = useState(initial);
+
+      async function handleSave() {
+        if (!form.subject.trim() || saving) return;
+        setSaving(true);
+        try {
+          await API.post("communications", form);
+          await refresh();
+          setShowForm(false); setForm(initial);
+        } catch (e) { alert("Error: " + e.message); }
+        setSaving(false);
+      }
+
+      async function handleDelete(id) {
+        await API.del("communications", id);
+        await refresh();
+      }
+
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <p style={{ fontSize: 13, color: "#666" }}>Date-stamped record of all correspondence</p>
+            <button className="btn btn-primary" onClick={() => { setForm({...initial, date: new Date().toISOString().split("T")[0]}); setShowForm(true); }}>+ Log Communication</button>
+          </div>
+
+          {communications.length === 0 ? <div className="empty">No communications logged yet.</div> : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {communications.map(c => (
+                <div key={c._id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{c.subject}</div>
+                    <div style={{ fontSize: 12, color: "#777", marginTop: 3 }}>
+                      {formatDate(c.date)} &nbsp;|&nbsp; {c.channel} &nbsp;|&nbsp; {c.direction}
+                      {c.clientName && <> &nbsp;|&nbsp; {c.clientName}</>}
+                      {c.parties && <> &nbsp;|&nbsp; With: {c.parties}</>}
+                    </div>
+                    {c.summary && <div style={{ fontSize: 12, color: "#555", marginTop: 5 }}>{c.summary}</div>}
+                  </div>
+                  <button className="btn-small" onClick={() => handleDelete(c._id)} style={{ color: "#dc3545", flexShrink: 0 }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showForm && (
+            <Modal title="Log Communication" onClose={() => setShowForm(false)}>
+              <Field label="Subject"><input className="input" value={form.subject} onChange={e => setForm({...form, subject: e.target.value})} /></Field>
+              <Field label="Client">
+                <input className="input" value={form.clientName} onChange={e => setForm({...form, clientName: e.target.value})} list="cl-comm" />
+                <datalist id="cl-comm">{clients.map(c => <option key={c._id} value={c.name} />)}</datalist>
+              </Field>
+              <div className="grid-3">
+                <Field label="Date"><input type="date" className="input" value={form.date} onChange={e => setForm({...form, date: e.target.value})} /></Field>
+                <Field label="Channel">
+                  <select className="input" value={form.channel} onChange={e => setForm({...form, channel: e.target.value})}>
+                    {CHANNELS.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </Field>
+                <Field label="Direction">
+                  <select className="input" value={form.direction} onChange={e => setForm({...form, direction: e.target.value})}>
+                    <option>Outbound</option><option>Inbound</option>
+                  </select>
+                </Field>
+              </div>
+              <Field label="Parties Involved"><input className="input" value={form.parties} onChange={e => setForm({...form, parties: e.target.value})} placeholder="e.g. NRS, client director" /></Field>
+              <Field label="Summary"><textarea className="input" style={{ minHeight: 70 }} value={form.summary} onChange={e => setForm({...form, summary: e.target.value})} /></Field>
+              <div className="flex-end">
+                <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+              </div>
+            </Modal>
+          )}
+        </div>
+      );
+    }
+
+    // ============ MODULE 6: BILLING ============
+    function BillingModule({ billing, clients, refresh }) {
+      const [showForm, setShowForm] = useState(false);
+      const [saving, setSaving] = useState(false);
+      const initial = { clientName: "", engagement: "", date: new Date().toISOString().split("T")[0], hours: "", rate: "", description: "" };
+      const [form, setForm] = useState(initial);
+
+      async function handleSave() {
+        if (!form.clientName.trim() || saving) return;
+        setSaving(true);
+        try {
+          await API.post("billing", { ...form, hours: parseFloat(form.hours) || 0, rate: parseFloat(form.rate) || 0 });
+          await refresh();
+          setShowForm(false); setForm(initial);
+        } catch (e) { alert("Error: " + e.message); }
+        setSaving(false);
+      }
+
+      async function toggleField(id, field, current) {
+        await API.patch("billing", id, { [field]: !current });
+        await refresh();
+      }
+
+      async function handleDelete(id) {
+        await API.del("billing", id);
+        await refresh();
+      }
+
+      const totalHours = billing.reduce((s, b) => s + (b.hours || 0), 0);
+      const totalBilled = billing.reduce((s, b) => s + (b.hours || 0) * (b.rate || 0), 0);
+      const totalPaid = billing.filter(b => b.paid).reduce((s, b) => s + (b.hours || 0) * (b.rate || 0), 0);
+      const totalUnpaid = totalBilled - totalPaid;
+
+      return (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10, marginBottom: 16 }}>
+            {[
+              { label: "Total Hours", value: totalHours.toFixed(1) },
+              { label: "Total Billed", value: "₦" + totalBilled.toLocaleString() },
+              { label: "Paid", value: "₦" + totalPaid.toLocaleString(), color: "#198754" },
+              { label: "Outstanding", value: "₦" + totalUnpaid.toLocaleString(), color: totalUnpaid > 0 ? "#dc3545" : "#198754" },
+            ].map(s => (
+              <div key={s.label} className="stat-card">
+                <div className="stat-label">{s.label}</div>
+                <div className="stat-value" style={{ color: s.color || "#1a1a1a", fontSize: 18 }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+            <button className="btn btn-primary" onClick={() => { setForm({...initial, date: new Date().toISOString().split("T")[0]}); setShowForm(true); }}>+ Log Time</button>
+          </div>
+
+          {billing.length === 0 ? <div className="empty">No time entries yet.</div> : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {billing.map(b => (
+                <div key={b._id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{b.clientName}</div>
+                    <div style={{ fontSize: 12, color: "#777", marginTop: 2 }}>
+                      {formatDate(b.date)} &nbsp;|&nbsp; {b.hours}h @ ₦{(b.rate||0).toLocaleString()}/h = ₦{((b.hours||0)*(b.rate||0)).toLocaleString()}
+                      {b.engagement && <> &nbsp;|&nbsp; {b.engagement}</>}
+                    </div>
+                    {b.description && <div style={{ fontSize: 12, color: "#555", marginTop: 3 }}>{b.description}</div>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    <button className="btn-small" onClick={() => toggleField(b._id, "invoiced", b.invoiced)} style={{ background: b.invoiced ? "#e8f5e9" : "#f5f5f5" }}>
+                      {b.invoiced ? "Invoiced ✓" : "Not invoiced"}
+                    </button>
+                    <button className="btn-small" onClick={() => toggleField(b._id, "paid", b.paid)} style={{ background: b.paid ? "#e8f5e9" : "#f5f5f5" }}>
+                      {b.paid ? "Paid ✓" : "Unpaid"}
+                    </button>
+                    <button className="btn-small" onClick={() => handleDelete(b._id)} style={{ color: "#dc3545" }}>×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showForm && (
+            <Modal title="Log Time Entry" onClose={() => setShowForm(false)}>
+              <Field label="Client Name">
+                <input className="input" value={form.clientName} onChange={e => setForm({...form, clientName: e.target.value})} list="cl-bill" />
+                <datalist id="cl-bill">{clients.map(c => <option key={c._id} value={c.name} />)}</datalist>
+              </Field>
+              <Field label="Engagement / Service"><input className="input" value={form.engagement} onChange={e => setForm({...form, engagement: e.target.value})} placeholder="e.g. Annual CIT filing" /></Field>
+              <div className="grid-3">
+                <Field label="Date"><input type="date" className="input" value={form.date} onChange={e => setForm({...form, date: e.target.value})} /></Field>
+                <Field label="Hours"><input type="number" step="0.5" className="input" value={form.hours} onChange={e => setForm({...form, hours: e.target.value})} /></Field>
+                <Field label="Rate (₦/hr)"><input type="number" className="input" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} /></Field>
+              </div>
+              <Field label="Description"><textarea className="input" style={{ minHeight: 50 }} value={form.description} onChange={e => setForm({...form, description: e.target.value})} /></Field>
+              <div className="flex-end">
+                <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Entry"}</button>
+              </div>
+            </Modal>
+          )}
+        </div>
+      );
+    }
+
+    // ============ DASHBOARD ============
+    function Dashboard({ dashboard, loading }) {
+      if (loading) return <div className="empty">Loading dashboard...</div>;
+      if (!dashboard) return <div className="empty">Welcome to Tzaddy Practice Manager.</div>;
+
+      const stats = [
+        { label: "Active Clients", value: dashboard.activeClients, color: "#198754" },
+        { label: "Pending KYC", value: dashboard.pendingKyc, color: dashboard.pendingKyc > 0 ? "#fd7e14" : "#198754" },
+        { label: "Overdue Filings", value: dashboard.overdueCount, color: dashboard.overdueCount > 0 ? "#dc3545" : "#198754" },
+        { label: "Due ≤14 Days", value: dashboard.dueSoonCount, color: dashboard.dueSoonCount > 0 ? "#fd7e14" : "#198754" },
+        { label: "EFS Pending", value: dashboard.pendingEfs, color: dashboard.pendingEfs > 0 ? "#0d6efd" : "#198754" },
+        { label: "Outstanding", value: dashboard.unpaidAmount > 0 ? "₦" + dashboard.unpaidAmount.toLocaleString() : "₦0", color: dashboard.unpaidAmount > 0 ? "#dc3545" : "#198754" },
+      ];
+
+      return (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 24 }}>
+            {stats.map(s => (
+              <div key={s.label} className="stat-card">
+                <div className="stat-label">{s.label}</div>
+                <div className="stat-value" style={{ color: s.color }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {dashboard.overdueCount > 0 && (
+            <div className="alert-red">
+              <div style={{ fontWeight: 700, fontSize: 13, color: "#dc3545", marginBottom: 6 }}>⚠ Overdue Compliance</div>
+              {dashboard.overdueItems.map(c => (
+                <div key={c._id} style={{ fontSize: 12, color: "#842029", marginBottom: 3 }}>
+                  {c.clientName} — {c.taxHead} — Due {formatDate(c.dueDate)} ({Math.abs(daysUntil(c.dueDate))} days overdue)
+                </div>
+              ))}
+            </div>
+          )}
+
+          {dashboard.dueSoonCount > 0 && (
+            <div className="alert-yellow">
+              <div style={{ fontWeight: 700, fontSize: 13, color: "#997404", marginBottom: 6 }}>Upcoming Deadlines (14 days)</div>
+              {dashboard.dueSoonItems.map(c => (
+                <div key={c._id} style={{ fontSize: 12, color: "#664d03", marginBottom: 3 }}>
+                  {c.clientName} — {c.taxHead} — Due {formatDate(c.dueDate)} ({daysUntil(c.dueDate)} days)
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ============ MAIN APP ============
+    const TABS = [
+      { id: "dashboard", label: "Dashboard", icon: "◉" },
+      { id: "clients", label: "Clients", icon: "◈" },
+      { id: "compliance", label: "Compliance", icon: "◷" },
+      { id: "efs", label: "EFS Workflow", icon: "⬡" },
+      { id: "documents", label: "Documents", icon: "▤" },
+      { id: "communications", label: "Comms Log", icon: "◬" },
+      { id: "billing", label: "Billing", icon: "₦" },
+    ];
+
+    function App() {
+      const [tab, setTab] = useState("dashboard");
+      const [loading, setLoading] = useState(true);
+      const [clients, setClients] = useState([]);
+      const [compliance, setCompliance] = useState([]);
+      const [efsWorkflow, setEfsWorkflow] = useState([]);
+      const [documents, setDocuments] = useState([]);
+      const [communications, setCommunications] = useState([]);
+      const [billing, setBilling] = useState([]);
+      const [dashboard, setDashboard] = useState(null);
+      const [error, setError] = useState(null);
+
+      const refresh = useCallback(async () => {
+        try {
+          const [cl, co, ef, doc, comm, bill, dash] = await Promise.all([
+            API.get("clients"),
+            API.get("compliance"),
+            API.get("efs"),
+            API.get("documents"),
+            API.get("communications"),
+            API.get("billing"),
+            API.get("dashboard"),
+          ]);
+          setClients(cl); setCompliance(co); setEfsWorkflow(ef);
+          setDocuments(doc); setCommunications(comm); setBilling(bill);
+          setDashboard(dash);
+          setError(null);
+        } catch (e) {
+          setError("Cannot connect to server. Make sure the backend is running.");
+        }
+        setLoading(false);
+      }, []);
+
+      useEffect(() => { refresh(); }, [refresh]);
+
+      async function handleReset() {
+        if (!confirm("This will delete ALL data permanently. Are you sure?")) return;
+        try {
+          await fetch("/api/reset", { method: "POST" });
+          await refresh();
+        } catch (e) { alert("Error: " + e.message); }
+      }
+
+      if (error) {
+        return (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", padding: 20 }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>⚠</div>
+              <h2 style={{ marginBottom: 8 }}>Connection Error</h2>
+              <p style={{ color: "#666", marginBottom: 20 }}>{error}</p>
+              <button className="btn btn-primary" onClick={() => { setLoading(true); setError(null); refresh(); }}>Retry</button>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div>
+          {/* Header */}
+          <div style={{ background: "#1a1a1a", color: "#fff", padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: 1 }}>TZADDY</div>
+              <div style={{ fontSize: 11, color: "#999", letterSpacing: "0.5px" }}>PRACTICE MANAGER</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 11, color: "#4ade80" }}>● Connected to MongoDB</span>
+              <button onClick={handleReset} style={{ background: "none", border: "1px solid #444", color: "#999", padding: "4px 10px", borderRadius: 4, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>Reset All</button>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="tabs">
+            {TABS.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)} className={`tab ${tab === t.id ? "active" : ""}`}>
+                <span style={{ marginRight: 5 }}>{t.icon}</span> {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Content */}
+          <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 24px" }}>
+            <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 700 }}>
+              {TABS.find(t => t.id === tab)?.label}
+            </h2>
+
+            {loading ? <div className="empty">Loading...</div> : (
+              <>
+                {tab === "dashboard" && <Dashboard dashboard={dashboard} loading={loading} />}
+                {tab === "clients" && <ClientsModule clients={clients} setClients={setClients} refresh={refresh} />}
+                {tab === "compliance" && <ComplianceModule compliance={compliance} setCompliance={setCompliance} clients={clients} refresh={refresh} />}
+                {tab === "efs" && <EFSModule efsWorkflow={efsWorkflow} clients={clients} refresh={refresh} />}
+                {tab === "documents" && <DocumentsModule documents={documents} clients={clients} refresh={refresh} />}
+                {tab === "communications" && <CommunicationsModule communications={communications} clients={clients} refresh={refresh} />}
+                {tab === "billing" && <BillingModule billing={billing} clients={clients} refresh={refresh} />}
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
