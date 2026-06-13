@@ -45,20 +45,19 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use("/api/clients",        require("./tzaddy-pm/routes/clients"));
-app.use("/api/compliance",     require("./tzaddy-pm/routes/compliance"));
-app.use("/api/efs",            require("./tzaddy-pm/routes/efs"));
-app.use("/api/documents",      require("./tzaddy-pm/routes/documents"));
-app.use("/api/communications", require("./tzaddy-pm/routes/communications"));
-app.use("/api/billing",        require("./tzaddy-pm/routes/billing"));
-app.use("/api/attachments",    require("./tzaddy-pm/routes/attachments")); // NEW
+app.use("/api/clients",        require("./routes/clients"));
+app.use("/api/compliance",     require("./routes/compliance"));
+app.use("/api/efs",            require("./routes/efs"));
+app.use("/api/documents",      require("./routes/documents"));
+app.use("/api/communications", require("./routes/communications"));
+app.use("/api/billing",        require("./routes/billing"));
+app.use("/api/attachments",    require("./routes/attachments")); // NEW
 
 // Dashboard summary
-const Client     = require("./tzaddy-pm/models/Client");
-const Compliance = require("./tzaddy-pm/models/Compliance");
-const EFS        = require("./tzaddy-pm/models/EFS");
-const Billing    = require("./tzaddy-pm/models/Billing");
-
+const Client     = require("./models/Client");
+const Compliance = require("./models/Compliance");
+const EFS        = require("./models/EFS");
+const Billing    = require("./models/Billing");
 app.get("/api/dashboard", async (req, res) => {
   try {
     const now = new Date();
@@ -110,10 +109,10 @@ app.post("/api/reset", async (req, res) => {
       Client.deleteMany({}),
       Compliance.deleteMany({}),
       EFS.deleteMany({}),
-      require("./tzaddy-pm/models/Document").deleteMany({}),
-      require("./tzaddy-pm/models/Communication").deleteMany({}),
+      require("./models/Document").deleteMany({}),
+      require("./models/Communication").deleteMany({}),
       Billing.deleteMany({}),
-      require("./tzaddy-pm/models/Attachment").deleteMany({}), // NEW
+      require("./models/Attachment").deleteMany({}), // NEW
     ]);
     res.json({ message: "All data cleared" });
   } catch (err) {
