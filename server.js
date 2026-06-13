@@ -1,5 +1,3 @@
-// mongodb+srv://demiladedavid12_db_user:Elizabeth2013@tzaddycluster.udkdubn.mongodb.net/?appName=TzaddyCluster
-
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -11,42 +9,55 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: "5mb" }));
-app.use(express.static(path.join(__dirname, "tzaddy-pm/public")));
+app.use(express.json({ limit: "10mb" })); // raised from 5mb to handle base64 PDFs
+app.use(express.static(path.join(__dirname, "build")));
 
 // MongoDB connection
 const mongoUri = process.env.MONGODB_URI && process.env.MONGODB_URI.trim();
+let dbConnected = false;
+
 if (!mongoUri) {
-  console.error("MongoDB URI not configured. Set MONGODB_URI in .env");
-  process.exit(1);
+  console.error("MongoDB URI not configured. Set MONGODB_URI in environment variable.");
+} else {
+  mongoose
+    .connect(mongoUri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 10000,
+    })
+    .then(() => {
+      dbConnected = true;
+      console.log("Connected to MongoDB Atlas");
+    })
+    .catch((err) => {
+      dbConnected = false;
+      console.error("MongoDB connection error:", err);
+      if (err.reason) console.error("Reason:", err.reason);
+    });
 }
 
-mongoose
-  .connect(mongoUri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 10000,
-  })
-  .then(() => console.log("Connected to MongoDB Atlas"))
-  .catch((err) => {
-    console.error("MongoDB connection error:", err);
-    if (err.reason) console.error("Reason:", err.reason);
-    process.exit(1);
-  });
+// Block API calls until DB is ready
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api") && !dbConnected) {
+    return res.status(503).json({ error: "Service unavailable: database not connected" });
+  }
+  next();
+});
 
 // Routes
-app.use("/api/clients", require("./tzaddy-pm/routes/clients"));
-app.use("/api/compliance", require("./tzaddy-pm/routes/compliance"));
-app.use("/api/efs", require("./tzaddy-pm/routes/efs"));
-app.use("/api/documents", require("./tzaddy-pm/routes/documents"));
+app.use("/api/clients",        require("./tzaddy-pm/routes/clients"));
+app.use("/api/compliance",     require("./tzaddy-pm/routes/compliance"));
+app.use("/api/efs",            require("./tzaddy-pm/routes/efs"));
+app.use("/api/documents",      require("./tzaddy-pm/routes/documents"));
 app.use("/api/communications", require("./tzaddy-pm/routes/communications"));
-app.use("/api/billing", require("./tzaddy-pm/routes/billing"));
+app.use("/api/billing",        require("./tzaddy-pm/routes/billing"));
+app.use("/api/attachments",    require("./tzaddy-pm/routes/attachments")); // NEW
 
-// Dashboard summary endpoint
-const Client = require("./tzaddy-pm/models/Client");
+// Dashboard summary
+const Client     = require("./tzaddy-pm/models/Client");
 const Compliance = require("./tzaddy-pm/models/Compliance");
-const EFS = require("./tzaddy-pm/models/EFS");
-const Billing = require("./tzaddy-pm/models/Billing");
+const EFS        = require("./tzaddy-pm/models/EFS");
+const Billing    = require("./tzaddy-pm/models/Billing");
 
 app.get("/api/dashboard", async (req, res) => {
   try {
@@ -92,7 +103,7 @@ app.get("/api/dashboard", async (req, res) => {
   }
 });
 
-// Reset endpoint (use with caution)
+// Reset endpoint
 app.post("/api/reset", async (req, res) => {
   try {
     await Promise.all([
@@ -102,6 +113,7 @@ app.post("/api/reset", async (req, res) => {
       require("./tzaddy-pm/models/Document").deleteMany({}),
       require("./tzaddy-pm/models/Communication").deleteMany({}),
       Billing.deleteMany({}),
+      require("./tzaddy-pm/models/Attachment").deleteMany({}), // NEW
     ]);
     res.json({ message: "All data cleared" });
   } catch (err) {
@@ -111,9 +123,8 @@ app.post("/api/reset", async (req, res) => {
 
 // Serve frontend for all non-API routes
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "tzaddy-pm/public", "index.html"));
+  res.sendFile(path.join(__dirname, "build", "index.html"));
 });
-
 app.listen(PORT, () => {
   console.log(`Tzaddy Practice Manager running on port ${PORT}`);
 });
